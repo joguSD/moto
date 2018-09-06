@@ -233,7 +233,85 @@ class ResponsesMockAWS(BaseMockAWS):
             pass
 
 
-MockAWS = ResponsesMockAWS
+BOTOCORE_HTTP_METHODS = [
+    'GET', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT'
+]
+from io import BytesIO
+from botocore.handlers import BUILTIN_HANDLERS
+from botocore.awsrequest import AWSResponse
+
+
+class FakeRawResponse(BytesIO):
+    def __init__(self, input):
+        if isinstance(input, six.text_type):
+            input = input.encode('utf-8')
+        super(FakeRawResponse, self).__init__(input)
+
+    def stream(self, **kwargs):
+        contents = self.read()
+        while contents:
+            yield contents
+            contents = self.read()
+
+
+class BotocoreStubber(object):
+    def __init__(self):
+        self.methods = defaultdict(list)
+
+    def reset(self):
+        self.methods.clear()
+
+    def register_response(self, method, pattern, response):
+        matchers = self.methods[method]
+        matchers.append((pattern, response))
+
+    def __call__(self, event_name, request, **kwargs):
+        response = None
+        response_callback = None
+        found_index = None
+        matchers = self.methods.get(request.method)
+
+        base_url = request.url.split('?', 1)[0]
+        for i, (pattern, callback) in enumerate(matchers):
+            if pattern.match(base_url):
+                if found_index is None:
+                    found_index = i
+                    response_callback = callback
+                else:
+                    matchers.pop(found_index)
+                    break
+
+        if response_callback is not None:
+            for header, value in request.headers.items():
+                if isinstance(value, six.binary_type):
+                    request.headers[header] = value.decode('utf-8')
+            status, headers, body = response_callback(request, request.url, request.headers)
+            body = FakeRawResponse(body)
+            response = AWSResponse(request.url, status, headers, body)
+
+        return response
+
+
+class BotocoreEventMockAWS(BaseMockAWS):
+    botocore_stubber = BotocoreStubber()
+    def reset(self):
+        self.botocore_stubber.reset()
+
+    def enable_patching(self):
+        BUILTIN_HANDLERS.append(('before-send', self.botocore_stubber))
+
+        for method in BOTOCORE_HTTP_METHODS:
+            for backend in self.backends_for_urls.values():
+                for key, value in backend.urls.items():
+                    pattern = re.compile(key)
+                    self.botocore_stubber.register_response(method, pattern, value)
+
+    def disable_patching(self):
+        BUILTIN_HANDLERS.remove(('before-send', self.botocore_stubber))
+        self.reset()
+
+
+MockAWS = BotocoreEventMockAWS
 
 
 class ServerModeMockAWS(BaseMockAWS):

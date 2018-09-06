@@ -708,7 +708,10 @@ class ResponseObject(_TemplateEnvironmentMixin):
             # Copy key
             # you can have a quoted ?version=abc with a version Id, so work on
             # we need to parse the unquoted string first
-            src_key_parsed = urlparse(request.headers.get("x-amz-copy-source"))
+            src_key = request.headers.get("x-amz-copy-source")
+            if isinstance(src_key, six.binary_type):
+                src_key = src_key.decode('utf-8')
+            src_key_parsed = urlparse(src_key)
             src_bucket, src_key = unquote(src_key_parsed.path).\
                 lstrip("/").split("/", 1)
             src_version_id = parse_qs(src_key_parsed.query).get(
