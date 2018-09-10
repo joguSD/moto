@@ -10,6 +10,7 @@ import xmltodict
 
 from moto.packages.httpretty.core import HTTPrettyRequest
 from moto.core.responses import _TemplateEnvironmentMixin
+from moto.core.utils import path_url
 
 from moto.s3bucket_path.utils import bucket_name_from_url as bucketpath_bucket_name_from_url, \
     parse_key_name as bucketpath_parse_key_name, is_delete_keys as bucketpath_is_delete_keys
@@ -487,7 +488,7 @@ class ResponseObject(_TemplateEnvironmentMixin):
         if isinstance(request, HTTPrettyRequest):
             path = request.path
         else:
-            path = request.full_path if hasattr(request, 'full_path') else request.path_url
+            path = request.full_path if hasattr(request, 'full_path') else path_url(request.url)
 
         if self.is_delete_keys(request, path, bucket_name):
             return self._bucket_response_delete_keys(request, body, bucket_name, headers)

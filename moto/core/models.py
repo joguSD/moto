@@ -2,11 +2,14 @@
 from __future__ import unicode_literals
 from __future__ import absolute_import
 
-from collections import defaultdict
 import functools
 import inspect
 import re
 import six
+from io import BytesIO
+from collections import defaultdict
+from botocore.handlers import BUILTIN_HANDLERS
+from botocore.awsrequest import AWSResponse
 
 from moto import settings
 import responses
@@ -236,16 +239,13 @@ class ResponsesMockAWS(BaseMockAWS):
 BOTOCORE_HTTP_METHODS = [
     'GET', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT'
 ]
-from io import BytesIO
-from botocore.handlers import BUILTIN_HANDLERS
-from botocore.awsrequest import AWSResponse
 
 
-class FakeRawResponse(BytesIO):
+class MockRawResponse(BytesIO):
     def __init__(self, input):
         if isinstance(input, six.text_type):
             input = input.encode('utf-8')
-        super(FakeRawResponse, self).__init__(input)
+        super(MockRawResponse, self).__init__(input)
 
     def stream(self, **kwargs):
         contents = self.read()
@@ -286,7 +286,7 @@ class BotocoreStubber(object):
                 if isinstance(value, six.binary_type):
                     request.headers[header] = value.decode('utf-8')
             status, headers, body = response_callback(request, request.url, request.headers)
-            body = FakeRawResponse(body)
+            body = MockRawResponse(body)
             response = AWSResponse(request.url, status, headers, body)
 
         return response
